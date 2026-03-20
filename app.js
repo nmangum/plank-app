@@ -625,12 +625,8 @@ function initAuth() {
 
   // Sign out
   $('sign-out-btn').addEventListener('click', async () => {
-    closeUserDropdown();
     await db.auth.signOut();
-    currentUser = null;
-    sessions    = [];
-    showAuthScreen();
-    renderAll();
+    window.location.reload();
   });
 
   // Close dropdown on outside click
