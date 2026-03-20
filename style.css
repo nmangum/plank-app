@@ -160,9 +160,6 @@ body {
   align-items: center;
 }
 
-.header-spacer {
-  flex: 1;
-}
 
 /* ── Theme Picker ─────────────────────────────────────────── */
 
@@ -198,15 +195,6 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: none;
-}
-
-.logo-icon {
-  font-size: 22px;
-  color: var(--accent);
-  line-height: 1;
-  letter-spacing: -2px;
 }
 
 .logo-text {

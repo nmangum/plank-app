@@ -623,14 +623,7 @@ function initAuth() {
     $('user-btn').setAttribute('aria-expanded', isHidden ? 'true' : 'false');
   });
 
-  // Sign out
-  $('sign-out-btn').addEventListener('click', async () => {
-    try { await db.auth.signOut(); } catch (_) {}
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('sb-'))
-      .forEach(k => localStorage.removeItem(k));
-    window.location.reload();
-  });
+  // (sign out handled by global signOut() called via onclick)
 
   // Close dropdown on outside click (not when clicking inside it)
   document.addEventListener('click', (e) => {
@@ -654,6 +647,16 @@ function initAuth() {
     }
   });
 }
+
+// ── Sign Out (global so onclick="" can reach it) ──────────
+
+window.signOut = async function () {
+  try { await db.auth.signOut(); } catch (_) {}
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('sb-'))
+    .forEach(k => localStorage.removeItem(k));
+  window.location.reload();
+};
 
 // ── Init ──────────────────────────────────────────────────
 
