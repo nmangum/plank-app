@@ -632,20 +632,32 @@ function initAuth() {
     }
   });
 
-  // Auth state changes
+  // Auth state changes (sign in / sign out after initial load)
   db.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
+    if (event === 'SIGNED_IN') {
       currentUser = session.user;
       showApp(currentUser);
       await loadSessions();
       renderAll();
-    } else {
+    } else if (event === 'SIGNED_OUT') {
       currentUser = null;
       sessions    = [];
       showAuthScreen();
       renderAll();
     }
   });
+}
+
+async function initSession() {
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    currentUser = session.user;
+    showApp(currentUser);
+    await loadSessions();
+    renderAll();
+  } else {
+    showAuthScreen();
+  }
 }
 
 // ── Sign Out (global so onclick="" can reach it) ──────────
@@ -663,6 +675,7 @@ window.signOut = async function () {
 function init() {
   initTheme();
   initAuth();
+  initSession();
 
   $('session-date').value = todayStr();
   addSetRow();
