@@ -31,7 +31,10 @@ async function loadSessions() {
     .from('sessions')
     .select('id, date, sets')
     .order('date', { ascending: true });
-  if (error) { console.error('Load error:', error); return; }
+  if (error) {
+    console.error('Load error:', error);
+    throw error;
+  }
   sessions = data.map(r => ({ id: r.id, date: r.date, sets: r.sets }));
 }
 
@@ -672,7 +675,11 @@ async function initAuth() {
       initialHandled = true;
       currentUser    = session.user;
       showApp(currentUser);
-      await loadSessions();
+      try {
+        await loadSessions();
+      } catch (err) {
+        showToast(`Failed to load sessions: ${err.message}`, false);
+      }
       renderAll();
     }
   });
@@ -684,7 +691,11 @@ async function initAuth() {
     initialHandled = true;
     currentUser    = session.user;
     showApp(currentUser);
-    await loadSessions();
+    try {
+      await loadSessions();
+    } catch (err) {
+      showToast(`Failed to load sessions: ${err.message}`, false);
+    }
     renderAll();
   }
 }
