@@ -210,7 +210,7 @@ async function handleFormSubmit(e) {
   try {
     await insertSession(session);
   } catch (err) {
-    showError(`Save failed: ${err?.message || JSON.stringify(err)}`);
+    showError('Failed to save session. Please try again.');
     console.error(err);
     return;
   }
