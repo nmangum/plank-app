@@ -637,54 +637,73 @@ async function initAuth() {
     }
   });
 
-  // Listen for sign-in / sign-out events AFTER the initial load check below.
-  // Ignore INITIAL_SESSION — handled explicitly by getSession() instead.
+  // Guard so the first auth event (INITIAL_SESSION or SIGNED_IN) only
+  // triggers a full load once. Subsequent SIGNED_IN events (re-login after
+  // sign-out) must still go through.
+  let initialHandled = false;
+
   db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN') {
-      const incoming  = session.user.id;
-      const needsLoad = !currentUser || currentUser.id !== incoming;
-      currentUser = session.user;
-      showApp(currentUser);
-      if (needsLoad) {
-        await loadSessions();
-        renderAll();
-      }
-    } else if (event === 'SIGNED_OUT') {
-      currentUser = null;
-      sessions    = [];
+    if (event === 'SIGNED_OUT') {
+      currentUser    = null;
+      sessions       = [];
+      initialHandled = false;
       showAuthScreen();
       renderAll();
+      return;
     }
-    // TOKEN_REFRESHED, USER_UPDATED, etc. are intentionally ignored
+
+    // INITIAL_SESSION fires on every page load with the existing session (or null).
+    // SIGNED_IN fires on explicit login and, in some Supabase v2 builds, also on
+    // initial session restore. Handle both so we work regardless of SDK version.
+    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+      if (!session?.user) {
+        // No session — auth screen is already visible by default
+        initialHandled = true;
+        return;
+      }
+
+      const incoming  = session.user.id;
+      const sameUser  = currentUser?.id === incoming;
+
+      // Skip if this is the INITIAL_SESSION echo after getSession() already
+      // loaded everything for the same user.
+      if (initialHandled && sameUser) return;
+
+      initialHandled = true;
+      currentUser    = session.user;
+      showApp(currentUser);
+      await loadSessions();
+      renderAll();
+    }
   });
 
-  // Explicitly check for an existing session on page load.
-  // This is more reliable than waiting for INITIAL_SESSION from onAuthStateChange.
+  // Also call getSession() directly so we don't depend solely on the
+  // async INITIAL_SESSION event firing in time.
   const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
+  if (session?.user && !initialHandled) {
+    initialHandled = true;
+    currentUser    = session.user;
     showApp(currentUser);
     await loadSessions();
     renderAll();
   }
-  // If no session, auth overlay is already visible (no hidden class in HTML)
 }
 
 // ── Sign Out (global so onclick="" can reach it) ──────────
 
 window.signOut = async function () {
-  try { await db.auth.signOut(); } catch (_) {}
-  // Belt-and-suspenders: clear storage and update UI directly
-  // in case onAuthStateChange doesn't fire
-  Object.keys(localStorage)
-    .filter(k => k.startsWith('sb-'))
-    .forEach(k => localStorage.removeItem(k));
+  // Reset state and show auth screen immediately — don't wait for the API.
   currentUser = null;
   sessions    = [];
   if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
   if (chartBest)  { chartBest.destroy();  chartBest  = null; }
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('sb-'))
+    .forEach(k => localStorage.removeItem(k));
   showAuthScreen();
   renderAll();
+  // Fire-and-forget the Supabase API call to invalidate the server session.
+  try { await db.auth.signOut(); } catch (_) {}
 };
 
 // ── Init ──────────────────────────────────────────────────
