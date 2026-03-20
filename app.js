@@ -667,7 +667,12 @@ window.signOut = async function () {
   Object.keys(localStorage)
     .filter(k => k.startsWith('sb-'))
     .forEach(k => localStorage.removeItem(k));
-  window.location.reload();
+  currentUser = null;
+  sessions    = [];
+  if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
+  if (chartBest)  { chartBest.destroy();  chartBest  = null; }
+  showAuthScreen();
+  renderAll();
 };
 
 // ── Init ──────────────────────────────────────────────────
