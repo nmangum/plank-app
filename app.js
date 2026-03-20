@@ -36,6 +36,11 @@ async function loadSessions() {
 }
 
 async function insertSession(session) {
+  if (!currentUser) {
+    const { data: { session: s } } = await db.auth.getSession();
+    if (s?.user) currentUser = s.user;
+    else throw new Error('Not signed in');
+  }
   const { error } = await db.from('sessions').insert({
     id:      session.id,
     user_id: currentUser.id,
@@ -632,14 +637,17 @@ function initAuth() {
     }
   });
 
-  // Auth state changes (sign in / sign out after initial load)
+  // Auth state changes
   db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN') {
+    if (session?.user) {
+      const isNewUser = !currentUser || currentUser.id !== session.user.id;
       currentUser = session.user;
-      showApp(currentUser);
-      await loadSessions();
-      renderAll();
-    } else if (event === 'SIGNED_OUT') {
+      if (isNewUser) {
+        showApp(currentUser);
+        await loadSessions();
+        renderAll();
+      }
+    } else {
       currentUser = null;
       sessions    = [];
       showAuthScreen();
