@@ -598,7 +598,7 @@ function hideAuthError() {
   $('auth-error').classList.add('hidden');
 }
 
-function initAuth() {
+async function initAuth() {
   $('auth-signin-btn').addEventListener('click', async () => {
     hideAuthError();
     const email    = $('auth-email').value.trim();
@@ -637,10 +637,11 @@ function initAuth() {
     }
   });
 
-  // Single auth handler — covers initial load, sign in, token refresh, sign out
+  // Listen for sign-in / sign-out events AFTER the initial load check below.
+  // Ignore INITIAL_SESSION — handled explicitly by getSession() instead.
   db.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      const incoming = session.user.id;
+    if (event === 'SIGNED_IN') {
+      const incoming  = session.user.id;
       const needsLoad = !currentUser || currentUser.id !== incoming;
       currentUser = session.user;
       showApp(currentUser);
@@ -648,13 +649,25 @@ function initAuth() {
         await loadSessions();
         renderAll();
       }
-    } else {
+    } else if (event === 'SIGNED_OUT') {
       currentUser = null;
       sessions    = [];
       showAuthScreen();
       renderAll();
     }
+    // TOKEN_REFRESHED, USER_UPDATED, etc. are intentionally ignored
   });
+
+  // Explicitly check for an existing session on page load.
+  // This is more reliable than waiting for INITIAL_SESSION from onAuthStateChange.
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    currentUser = session.user;
+    showApp(currentUser);
+    await loadSessions();
+    renderAll();
+  }
+  // If no session, auth overlay is already visible (no hidden class in HTML)
 }
 
 // ── Sign Out (global so onclick="" can reach it) ──────────
@@ -676,9 +689,9 @@ window.signOut = async function () {
 
 // ── Init ──────────────────────────────────────────────────
 
-function init() {
+async function init() {
   initTheme();
-  initAuth();
+  await initAuth();
 
   $('session-date').value = todayStr();
   addSetRow();
