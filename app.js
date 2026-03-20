@@ -553,14 +553,34 @@ function initTheme() {
 
 // ── Auth ──────────────────────────────────────────────────
 
-function showAuthScreen() {
-  $('auth-overlay').classList.remove('hidden');
-  $('sign-out-btn').classList.add('hidden');
+function populateUserInfo(user) {
+  const email   = user.email || '';
+  const handle  = email.split('@')[0];
+  const initial = handle.charAt(0).toUpperCase();
+  const since   = new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  $('user-avatar').textContent    = initial;
+  $('user-avatar-lg').textContent = initial;
+  $('user-handle').textContent    = handle;
+  $('user-dropdown-email').textContent = email;
+  $('user-dropdown-since').textContent = `Member since ${since}`;
 }
 
-function showApp() {
+function closeUserDropdown() {
+  $('user-dropdown').classList.add('hidden');
+  $('user-btn').setAttribute('aria-expanded', 'false');
+}
+
+function showAuthScreen() {
+  $('auth-overlay').classList.remove('hidden');
+  $('user-area').classList.add('hidden');
+  closeUserDropdown();
+}
+
+function showApp(user) {
   $('auth-overlay').classList.add('hidden');
-  $('sign-out-btn').classList.remove('hidden');
+  populateUserInfo(user);
+  $('user-area').classList.remove('hidden');
 }
 
 function showAuthError(msg) {
@@ -579,7 +599,6 @@ function initAuth() {
     const email    = $('auth-email').value.trim();
     const password = $('auth-password').value;
     if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
-
     const { error } = await db.auth.signInWithPassword({ email, password });
     if (error) showAuthError(error.message);
   });
@@ -590,21 +609,34 @@ function initAuth() {
     const password = $('auth-password').value;
     if (!email || !password) { showAuthError('Please enter an email and password.'); return; }
     if (password.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
-
     const { error } = await db.auth.signUp({ email, password });
     if (error) showAuthError(error.message);
     else showAuthError('Check your email for a confirmation link, then sign in.');
   });
 
+  // User profile dropdown toggle
+  $('user-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dropdown = $('user-dropdown');
+    const isHidden = dropdown.classList.contains('hidden');
+    dropdown.classList.toggle('hidden', !isHidden);
+    $('user-btn').setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+  });
+
+  // Sign out
   $('sign-out-btn').addEventListener('click', async () => {
+    closeUserDropdown();
     await db.auth.signOut();
   });
 
-  // Handle auth state changes (sign in, sign out, token refresh)
+  // Close dropdown on outside click
+  document.addEventListener('click', () => closeUserDropdown());
+
+  // Auth state changes
   db.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
       currentUser = session.user;
-      showApp();
+      showApp(currentUser);
       await loadSessions();
       renderAll();
     } else {

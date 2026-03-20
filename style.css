@@ -156,9 +156,9 @@ body {
   max-width: 860px;
   margin: 0 auto;
   height: 60px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
 }
 
 /* ── Theme Picker ─────────────────────────────────────────── */
@@ -166,6 +166,7 @@ body {
 .theme-picker {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -720,12 +721,117 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: var(--accent);
 }
 
-/* ── Header right group ──────────────────────────────────── */
+/* ── User Profile ────────────────────────────────────────── */
 
-.header-right {
+.user-area {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px 4px 4px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  color: var(--text-primary);
+  font-family: var(--font);
+}
+
+.user-btn:hover {
+  border-color: var(--border-focus);
+  background: var(--bg-input);
+}
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.user-avatar-lg {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.user-handle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 240px;
+  z-index: 200;
+  animation: slideUp 0.15s ease;
+}
+
+.user-dropdown-header {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 16px;
+}
+
+.user-dropdown-meta {
+  min-width: 0;
+}
+
+.user-dropdown-email {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dropdown-since {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+}
+
+.user-signout-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border-radius: 0 0 var(--radius) var(--radius);
+  border: none;
+  padding: 12px 16px;
 }
 
 /* ── Auth Screen ─────────────────────────────────────────── */
