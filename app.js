@@ -601,14 +601,29 @@ function hideAuthError() {
   $('auth-error').classList.add('hidden');
 }
 
+async function startSession(user) {
+  currentUser = user;
+  showApp(user);
+  try {
+    await loadSessions();
+  } catch (err) {
+    showToast(`Could not load data: ${err.message}`, false);
+  }
+  renderAll();
+}
+
 async function initAuth() {
+  // ── Sign in ───────────────────────────────────────────────
+  // Handle the result directly here so we never depend on SIGNED_IN
+  // firing at the right moment.
   $('auth-signin-btn').addEventListener('click', async () => {
     hideAuthError();
     const email    = $('auth-email').value.trim();
     const password = $('auth-password').value;
     if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
-    const { error } = await db.auth.signInWithPassword({ email, password });
-    if (error) showAuthError(error.message);
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+    if (error) { showAuthError(error.message); return; }
+    if (data?.session?.user) await startSession(data.session.user);
   });
 
   $('auth-signup-btn').addEventListener('click', async () => {
@@ -631,89 +646,65 @@ async function initAuth() {
     $('user-btn').setAttribute('aria-expanded', isHidden ? 'true' : 'false');
   });
 
-  // (sign out handled by global signOut() called via onclick)
-
-  // Close dropdown on outside click (not when clicking inside it)
+  // Close dropdown on outside click
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#user-dropdown') && !e.target.closest('#user-btn')) {
       closeUserDropdown();
     }
   });
 
-  // Guard so the first auth event (INITIAL_SESSION or SIGNED_IN) only
-  // triggers a full load once. Subsequent SIGNED_IN events (re-login after
-  // sign-out) must still go through.
-  let initialHandled = false;
+  // ── Auth state listener ───────────────────────────────────
+  // Only used for two cases:
+  //   INITIAL_SESSION — page load when the user is already logged in
+  //   SIGNED_OUT      — server-side session expiry (not manual sign-out)
+  // Manual sign-in is handled above; manual sign-out is handled in window.signOut.
+  let pageLoadHandled = false;
 
   db.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_OUT') {
-      currentUser    = null;
-      sessions       = [];
-      initialHandled = false;
-      showAuthScreen();
-      renderAll();
+    if (event === 'INITIAL_SESSION') {
+      pageLoadHandled = true;
+      if (session?.user && !currentUser) {
+        await startSession(session.user);
+      }
       return;
     }
 
-    // INITIAL_SESSION fires on every page load with the existing session (or null).
-    // SIGNED_IN fires on explicit login and, in some Supabase v2 builds, also on
-    // initial session restore. Handle both so we work regardless of SDK version.
-    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-      if (!session?.user) {
-        // No session — auth screen is already visible by default
-        initialHandled = true;
-        return;
+    if (event === 'SIGNED_OUT') {
+      // Only act on SIGNED_OUT if it was NOT triggered by our own signOut()
+      // function (which already handled the UI). We detect this by checking
+      // whether currentUser is still set — if it is, the sign-out event is
+      // a stale async callback racing against a fresh login and must be ignored.
+      if (!currentUser) {
+        sessions = [];
+        showAuthScreen();
+        renderAll();
       }
-
-      const incoming  = session.user.id;
-      const sameUser  = currentUser?.id === incoming;
-
-      // Skip if this is the INITIAL_SESSION echo after getSession() already
-      // loaded everything for the same user.
-      if (initialHandled && sameUser) return;
-
-      initialHandled = true;
-      currentUser    = session.user;
-      showApp(currentUser);
-      try {
-        await loadSessions();
-      } catch (err) {
-        showToast(`Failed to load sessions: ${err.message}`, false);
-      }
-      renderAll();
     }
   });
 
-  // Also call getSession() directly so we don't depend solely on the
-  // async INITIAL_SESSION event firing in time.
+  // ── Page-load session check ───────────────────────────────
+  // getSession() reads localStorage synchronously-fast and is a reliable
+  // fallback in case INITIAL_SESSION hasn't fired yet.
   const { data: { session } } = await db.auth.getSession();
-  if (session?.user && !initialHandled) {
-    initialHandled = true;
-    currentUser    = session.user;
-    showApp(currentUser);
-    try {
-      await loadSessions();
-    } catch (err) {
-      showToast(`Failed to load sessions: ${err.message}`, false);
-    }
-    renderAll();
+  if (session?.user && !currentUser) {
+    pageLoadHandled = true;
+    await startSession(session.user);
   }
 }
 
 // ── Sign Out (global so onclick="" can reach it) ──────────
 
 window.signOut = async function () {
-  // Reset state and show auth screen immediately — don't wait for the API.
+  // Clear app state and show auth screen immediately.
   currentUser = null;
   sessions    = [];
   if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
   if (chartBest)  { chartBest.destroy();  chartBest  = null; }
-  Object.keys(localStorage)
-    .filter(k => k.startsWith('sb-'))
-    .forEach(k => localStorage.removeItem(k));
   showAuthScreen();
   renderAll();
-  // Fire-and-forget the Supabase API call to invalidate the server session.
+  // Let Supabase handle its own session/localStorage cleanup.
+  // Do NOT manually clear sb-* localStorage keys — that corrupts the
+  // client's internal state and breaks subsequent logins.
   try { await db.auth.signOut(); } catch (_) {}
 };
 
