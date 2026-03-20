@@ -625,12 +625,19 @@ function initAuth() {
 
   // Sign out
   $('sign-out-btn').addEventListener('click', async () => {
-    await db.auth.signOut();
+    try { await db.auth.signOut(); } catch (_) {}
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
     window.location.reload();
   });
 
-  // Close dropdown on outside click
-  document.addEventListener('click', () => closeUserDropdown());
+  // Close dropdown on outside click (not when clicking inside it)
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#user-dropdown') && !e.target.closest('#user-btn')) {
+      closeUserDropdown();
+    }
+  });
 
   // Auth state changes
   db.auth.onAuthStateChange(async (event, session) => {
