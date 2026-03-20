@@ -4,33 +4,50 @@
 
 'use strict';
 
+// ── Supabase ──────────────────────────────────────────────
+
+const SUPABASE_URL = 'https://xlscjphnoarzqzpfgxkq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_OiFhR8vy0lGJRmvNfGO0Aw_dE1xkqh5';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 // ── Constants ────────────────────────────────────────────
 
-const STORAGE_KEY = 'plank_sessions';
-const THEME_KEY   = 'plank_theme';
+const THEME_KEY = 'plank_theme';
 
 // ── State ─────────────────────────────────────────────────
 
-let sessions = [];          // Array of { id, date, sets: [seconds, ...] }
-let pendingDeleteId = null; // For the confirm modal
-let chartTotal = null;      // Chart.js instance
-let chartBest  = null;      // Chart.js instance
-let activeChart  = 'total'; // Which metric tab is showing
-let activePeriod = 'daily'; // daily | weekly | monthly
+let currentUser  = null;
+let sessions     = [];          // Array of { id, date, sets: [seconds, ...] }
+let pendingDeleteId = null;
+let chartTotal   = null;
+let chartBest    = null;
+let activeChart  = 'total';
+let activePeriod = 'daily';
 
-// ── Persistence ───────────────────────────────────────────
+// ── Persistence (Supabase) ────────────────────────────────
 
-function loadSessions() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    sessions = raw ? JSON.parse(raw) : [];
-  } catch {
-    sessions = [];
-  }
+async function loadSessions() {
+  const { data, error } = await db
+    .from('sessions')
+    .select('id, date, sets')
+    .order('date', { ascending: true });
+  if (error) { console.error('Load error:', error); return; }
+  sessions = data.map(r => ({ id: r.id, date: r.date, sets: r.sets }));
 }
 
-function saveSessions() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+async function insertSession(session) {
+  const { error } = await db.from('sessions').insert({
+    id:      session.id,
+    user_id: currentUser.id,
+    date:    session.date,
+    sets:    session.sets,
+  });
+  if (error) throw error;
+}
+
+async function deleteSession(id) {
+  const { error } = await db.from('sessions').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ── Helpers ───────────────────────────────────────────────
@@ -47,7 +64,6 @@ function formatSeconds(totalSecs) {
 }
 
 function formatDate(dateStr) {
-  // dateStr is YYYY-MM-DD; parse as local date to avoid timezone shifts
   const [y, mo, d] = dateStr.split('-').map(Number);
   const date = new Date(y, mo - 1, d);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -81,7 +97,6 @@ function currentStreak() {
   let streak = 1;
   const today = todayStr();
   const last = days[days.length - 1];
-  // Streak is live only if last session was today or yesterday
   const [ly, lm, ld] = last.split('-').map(Number);
   const lastDate = new Date(ly, lm - 1, ld);
   const [ty, tm, td] = today.split('-').map(Number);
@@ -116,8 +131,7 @@ function hideError() {
 
 function renderSetRows() {
   const list = $('sets-list');
-  const rows = list.querySelectorAll('.set-row');
-  rows.forEach((row, i) => {
+  list.querySelectorAll('.set-row').forEach((row, i) => {
     row.querySelector('.set-number').textContent = `Set ${i + 1}`;
   });
 }
@@ -144,7 +158,6 @@ function addSetRow(value = '') {
   `;
 
   row.querySelector('.set-remove').addEventListener('click', () => {
-    // Always keep at least one row
     if (list.querySelectorAll('.set-row').length > 1) {
       row.remove();
       renderSetRows();
@@ -169,7 +182,7 @@ function clearForm() {
 
 // ── Form Submit ───────────────────────────────────────────
 
-function handleFormSubmit(e) {
+async function handleFormSubmit(e) {
   e.preventDefault();
   hideError();
 
@@ -181,17 +194,24 @@ function handleFormSubmit(e) {
 
   const hasRaw = Array.from($('sets-list').querySelectorAll('.set-input'))
     .some(inp => inp.value.trim() !== '' && (isNaN(parseInt(inp.value, 10)) || parseInt(inp.value, 10) <= 0));
-
   if (hasRaw) {
     showError('Some set durations are invalid. Please enter positive whole numbers only.');
     return;
   }
 
   const prevBest = globalBest();
-  const session = { id: genId(), date, sets };
+  const session  = { id: genId(), date, sets };
+
+  try {
+    await insertSession(session);
+  } catch (err) {
+    showError('Failed to save session. Please try again.');
+    console.error(err);
+    return;
+  }
+
   sessions.push(session);
   sessions.sort((a, b) => a.date.localeCompare(b.date));
-  saveSessions();
   renderAll();
   const { msg, highlight } = pickEncouragement(session, prevBest);
   showToast(msg, highlight);
@@ -223,9 +243,9 @@ const CHART_COLORS = {
 function weekKey(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  const day  = date.getDay(); // 0=Sun
+  const day  = date.getDay();
   const mon  = new Date(date);
-  mon.setDate(d - ((day + 6) % 7)); // back to Monday
+  mon.setDate(d - ((day + 6) % 7));
   return [
     mon.getFullYear(),
     String(mon.getMonth() + 1).padStart(2, '0'),
@@ -234,36 +254,34 @@ function weekKey(dateStr) {
 }
 
 function monthKey(dateStr) {
-  return dateStr.slice(0, 7); // YYYY-MM
+  return dateStr.slice(0, 7);
 }
 
 function formatPeriodLabel(key, period) {
-  if (period === 'daily') return formatDate(key); // key is YYYY-MM-DD
+  if (period === 'daily') return formatDate(key);
   if (period === 'monthly') {
     const [y, m] = key.split('-');
     return new Date(Number(y), Number(m) - 1, 1)
       .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   }
-  // weekly — show "Mar 10" style for the Monday of that week
   return formatDate(key);
 }
 
 function buildChartData(type) {
   const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
 
-  // Aggregate into buckets keyed by period
   const buckets = new Map();
   for (const s of sorted) {
     const key = activePeriod === 'weekly'  ? weekKey(s.date)
               : activePeriod === 'monthly' ? monthKey(s.date)
-              : s.date; // daily — group by date, not session
+              : s.date;
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(s);
   }
 
-  const keys = [...buckets.keys()].sort();
+  const keys   = [...buckets.keys()].sort();
   const labels = keys.map(k => formatPeriodLabel(k, activePeriod));
-  const data = keys.map(k => {
+  const data   = keys.map(k => {
     const group = buckets.get(k);
     if (type === 'total') return group.reduce((sum, s) => sum + sessionTotal(s), 0);
     return Math.max(...group.map(sessionBest));
@@ -273,6 +291,7 @@ function buildChartData(type) {
 }
 
 function chartDefaults(color) {
+  const cs = prop => getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
   return {
     type: 'line',
     options: {
@@ -282,41 +301,29 @@ function chartDefaults(color) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-card').trim() || '#1a1d27',
-          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#2e3250',
+          backgroundColor: cs('--bg-card'),
+          borderColor:     cs('--border'),
           borderWidth: 1,
-          titleColor: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#9094b8',
-          bodyColor: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#e8eaf6',
+          titleColor:  cs('--text-secondary'),
+          bodyColor:   cs('--text-primary'),
           padding: 10,
-          callbacks: {
-            label: ctx => ` ${formatSeconds(ctx.parsed.y)}`,
-          },
+          callbacks: { label: ctx => ` ${formatSeconds(ctx.parsed.y)}` },
         },
       },
       scales: {
         x: {
-          grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() + '80' },
-          ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim(), font: { family: 'Inter', size: 11 }, maxRotation: 40 },
+          grid:  { color: cs('--border') + '80' },
+          ticks: { color: cs('--text-muted'), font: { family: 'Inter', size: 11 }, maxRotation: 40 },
         },
         y: {
           beginAtZero: true,
-          grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--border').trim() + '80' },
-          ticks: {
-            color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim(),
-            font: { family: 'Inter', size: 11 },
-            callback: v => formatSeconds(v),
-          },
+          grid:  { color: cs('--border') + '80' },
+          ticks: { color: cs('--text-muted'), font: { family: 'Inter', size: 11 }, callback: v => formatSeconds(v) },
         },
       },
       elements: {
-        line: { tension: 0.35, borderWidth: 2, borderColor: color.line },
-        point: {
-          radius: 4,
-          hoverRadius: 6,
-          backgroundColor: color.line,
-          borderColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
-          borderWidth: 2,
-        },
+        line:  { tension: 0.35, borderWidth: 2, borderColor: color.line },
+        point: { radius: 4, hoverRadius: 6, backgroundColor: color.line, borderColor: cs('--bg'), borderWidth: 2 },
       },
     },
   };
@@ -327,7 +334,7 @@ function updateCharts() {
 
   $('chart-empty').classList.toggle('hidden', !empty);
   $('chart-total').classList.toggle('hidden', empty);
-  $('chart-best').classList.toggle('hidden', true); // tab controls this
+  $('chart-best').classList.toggle('hidden', true);
 
   if (empty) {
     if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
@@ -335,57 +342,35 @@ function updateCharts() {
     return;
   }
 
-  // Total chart
-  const totalData = buildChartData('total');
+  const totalData  = buildChartData('total');
   const totalColor = CHART_COLORS.total;
-
   if (chartTotal) {
     chartTotal.data.labels = totalData.labels;
     chartTotal.data.datasets[0].data = totalData.data;
     chartTotal.update();
   } else {
     const cfg = chartDefaults(totalColor);
-    cfg.data = {
-      labels: totalData.labels,
-      datasets: [{
-        data: totalData.data,
-        borderColor: totalColor.line,
-        backgroundColor: totalColor.fill,
-        fill: true,
-      }],
-    };
+    cfg.data = { labels: totalData.labels, datasets: [{ data: totalData.data, borderColor: totalColor.line, backgroundColor: totalColor.fill, fill: true }] };
     chartTotal = new Chart($('chart-total'), cfg);
   }
 
-  // Best chart
   const bestData  = buildChartData('best');
   const bestColor = CHART_COLORS.best;
-
   if (chartBest) {
     chartBest.data.labels = bestData.labels;
     chartBest.data.datasets[0].data = bestData.data;
     chartBest.update();
   } else {
     const cfg = chartDefaults(bestColor);
-    cfg.data = {
-      labels: bestData.labels,
-      datasets: [{
-        data: bestData.data,
-        borderColor: bestColor.line,
-        backgroundColor: bestColor.fill,
-        fill: true,
-      }],
-    };
+    cfg.data = { labels: bestData.labels, datasets: [{ data: bestData.data, borderColor: bestColor.line, backgroundColor: bestColor.fill, fill: true }] };
     chartBest = new Chart($('chart-best'), cfg);
   }
 
-  // Respect active tab visibility
   applyChartTabVisibility();
 }
 
 function applyChartTabVisibility() {
-  const empty = sessions.length === 0;
-  if (empty) return;
+  if (sessions.length === 0) return;
   $('chart-total').classList.toggle('hidden', activeChart !== 'total');
   $('chart-best').classList.toggle('hidden',  activeChart !== 'best');
 }
@@ -405,7 +390,6 @@ function initChartTabs() {
       document.querySelectorAll('.chart-tab[data-period]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       activePeriod = btn.dataset.period;
-      // Rebuild charts with new aggregation
       if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
       if (chartBest)  { chartBest.destroy();  chartBest  = null; }
       if (sessions.length > 0) updateCharts();
@@ -416,8 +400,8 @@ function initChartTabs() {
 // ── Log Table ─────────────────────────────────────────────
 
 function updateLog() {
-  const tbody   = $('log-tbody');
-  const empty   = $('log-empty');
+  const tbody    = $('log-tbody');
+  const empty    = $('log-empty');
   const logCount = $('log-count');
 
   tbody.innerHTML = '';
@@ -431,24 +415,20 @@ function updateLog() {
   empty.classList.add('hidden');
 
   const bestSet   = globalBest();
-  const bestTotal = sessions.length > 0 ? Math.max(...sessions.map(sessionTotal)) : 0;
+  const bestTotal = Math.max(...sessions.map(sessionTotal));
 
-  // Newest date first; within same date, earlier submission first (ID encodes timestamp)
   const sorted = [...sessions].sort((a, b) => {
     if (b.date !== a.date) return b.date.localeCompare(a.date);
     return b.id.localeCompare(a.id);
   });
 
   sorted.forEach(session => {
-    const total    = sessionTotal(session);
-    const topSet   = sessionBest(session);
+    const total  = sessionTotal(session);
+    const topSet = sessionBest(session);
     const isBestSet   = topSet === bestSet   && bestSet   > 0;
     const isBestTotal = total  === bestTotal && bestTotal > 0;
 
-    const setsPills = session.sets
-      .map(s => `<span class="set-pill">${s}s</span>`)
-      .join('');
-
+    const setsPills  = session.sets.map(s => `<span class="set-pill">${s}s</span>`).join('');
     const setBadge   = isBestSet   ? `<span class="best-badge">★ PB</span>` : '';
     const totalBadge = isBestTotal ? `<span class="best-badge">★ PB</span>` : '';
 
@@ -488,10 +468,16 @@ function closeDeleteModal() {
   $('modal-overlay').classList.add('hidden');
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (!pendingDeleteId) return;
+  try {
+    await deleteSession(pendingDeleteId);
+  } catch (err) {
+    console.error('Delete error:', err);
+    closeDeleteModal();
+    return;
+  }
   sessions = sessions.filter(s => s.id !== pendingDeleteId);
-  saveSessions();
   renderAll();
   closeDeleteModal();
 }
@@ -524,8 +510,7 @@ function showToast(msg, highlight = false) {
   el.textContent = msg;
   el.classList.toggle('toast-highlight', highlight);
   el.classList.remove('hidden');
-  // Force reflow so transition fires
-  el.offsetHeight; // eslint-disable-line no-unused-expressions
+  el.offsetHeight;
   el.classList.add('visible');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
@@ -539,9 +524,9 @@ function pickEncouragement(session, prevBest) {
   const count   = sessions.length;
   const streak  = currentStreak();
 
-  if (newBest > prevBest)            return { msg: `New personal best — ${formatSeconds(newBest)}!`, highlight: true };
-  if ([5, 10, 25, 50, 100].includes(count)) return { msg: `${count} sessions. You're building something real.`, highlight: true };
-  if ([3, 7, 14, 30].includes(streak))      return { msg: `${streak}-day streak!`, highlight: true };
+  if (newBest > prevBest)                        return { msg: `New personal best — ${formatSeconds(newBest)}!`, highlight: true };
+  if ([5, 10, 25, 50, 100].includes(count))      return { msg: `${count} sessions. You're building something real.`, highlight: true };
+  if ([3, 7, 14, 30].includes(streak))           return { msg: `${streak}-day streak!`, highlight: true };
   return { msg: PHRASES[Math.floor(Math.random() * PHRASES.length)], highlight: false };
 }
 
@@ -553,7 +538,6 @@ function applyTheme(theme) {
   document.querySelectorAll('.theme-swatch').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.theme === theme);
   });
-  // Rebuild charts so colors pick up new CSS variable values
   if (chartTotal) { chartTotal.destroy(); chartTotal = null; }
   if (chartBest)  { chartBest.destroy();  chartBest  = null; }
   if (sessions.length > 0) updateCharts();
@@ -567,24 +551,84 @@ function initTheme() {
   });
 }
 
+// ── Auth ──────────────────────────────────────────────────
+
+function showAuthScreen() {
+  $('auth-overlay').classList.remove('hidden');
+  $('sign-out-btn').classList.add('hidden');
+}
+
+function showApp() {
+  $('auth-overlay').classList.add('hidden');
+  $('sign-out-btn').classList.remove('hidden');
+}
+
+function showAuthError(msg) {
+  const el = $('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function hideAuthError() {
+  $('auth-error').classList.add('hidden');
+}
+
+function initAuth() {
+  $('auth-signin-btn').addEventListener('click', async () => {
+    hideAuthError();
+    const email    = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
+
+    const { error } = await db.auth.signInWithPassword({ email, password });
+    if (error) showAuthError(error.message);
+  });
+
+  $('auth-signup-btn').addEventListener('click', async () => {
+    hideAuthError();
+    const email    = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    if (!email || !password) { showAuthError('Please enter an email and password.'); return; }
+    if (password.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
+
+    const { error } = await db.auth.signUp({ email, password });
+    if (error) showAuthError(error.message);
+    else showAuthError('Check your email for a confirmation link, then sign in.');
+  });
+
+  $('sign-out-btn').addEventListener('click', async () => {
+    await db.auth.signOut();
+  });
+
+  // Handle auth state changes (sign in, sign out, token refresh)
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      currentUser = session.user;
+      showApp();
+      await loadSessions();
+      renderAll();
+    } else {
+      currentUser = null;
+      sessions    = [];
+      showAuthScreen();
+      renderAll();
+    }
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────
 
 function init() {
-  loadSessions();
   initTheme();
+  initAuth();
 
-  // Set default date
   $('session-date').value = todayStr();
-
-  // Add initial set row
   addSetRow();
 
-  // Form events
   $('session-form').addEventListener('submit', handleFormSubmit);
   $('add-set-btn').addEventListener('click', () => addSetRow());
   $('clear-form-btn').addEventListener('click', clearForm);
 
-  // Modal events
   $('modal-confirm').addEventListener('click', confirmDelete);
   $('modal-cancel').addEventListener('click', closeDeleteModal);
   $('modal-overlay').addEventListener('click', e => {
@@ -594,11 +638,7 @@ function init() {
     if (e.key === 'Escape') closeDeleteModal();
   });
 
-  // Chart tabs
   initChartTabs();
-
-  // Initial render
-  renderAll();
 }
 
 document.addEventListener('DOMContentLoaded', init);
