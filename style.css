@@ -156,9 +156,9 @@ body {
   max-width: 860px;
   margin: 0 auto;
   height: 60px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 /* ── Theme Picker ─────────────────────────────────────────── */
@@ -166,7 +166,6 @@ body {
 .theme-picker {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
 }
 
@@ -823,6 +822,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   height: 1px;
   background: var(--border);
   margin: 0;
+}
+
+.user-dropdown-themes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.user-dropdown-section-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .user-signout-btn {
