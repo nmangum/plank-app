@@ -637,13 +637,14 @@ function initAuth() {
     }
   });
 
-  // Auth state changes
+  // Single auth handler — covers initial load, sign in, token refresh, sign out
   db.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
-      const isNewUser = !currentUser || currentUser.id !== session.user.id;
+      const incoming = session.user.id;
+      const needsLoad = !currentUser || currentUser.id !== incoming;
       currentUser = session.user;
-      if (isNewUser) {
-        showApp(currentUser);
+      showApp(currentUser);
+      if (needsLoad) {
         await loadSessions();
         renderAll();
       }
@@ -656,22 +657,12 @@ function initAuth() {
   });
 }
 
-async function initSession() {
-  const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    showApp(currentUser);
-    await loadSessions();
-    renderAll();
-  } else {
-    showAuthScreen();
-  }
-}
-
 // ── Sign Out (global so onclick="" can reach it) ──────────
 
 window.signOut = async function () {
   try { await db.auth.signOut(); } catch (_) {}
+  // Belt-and-suspenders: clear storage and update UI directly
+  // in case onAuthStateChange doesn't fire
   Object.keys(localStorage)
     .filter(k => k.startsWith('sb-'))
     .forEach(k => localStorage.removeItem(k));
@@ -688,7 +679,6 @@ window.signOut = async function () {
 function init() {
   initTheme();
   initAuth();
-  initSession();
 
   $('session-date').value = todayStr();
   addSetRow();
