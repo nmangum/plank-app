@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plank Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon">▬</span>
+          <span class="logo-text">Plank Tracker</span>
+        </div>
+        <div class="theme-picker" role="group" aria-label="Color theme">
+          <button class="theme-swatch" data-theme="dark"   title="Dark"   aria-label="Dark theme"></button>
+          <button class="theme-swatch" data-theme="light"  title="Light"  aria-label="Light theme"></button>
+          <button class="theme-swatch" data-theme="forest" title="Forest" aria-label="Forest theme"></button>
+          <button class="theme-swatch" data-theme="sunset" title="Sunset" aria-label="Sunset theme"></button>
+          <button class="theme-swatch" data-theme="slate"  title="Slate"  aria-label="Slate theme"></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Summary Stats -->
+    <section class="stats-section">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-sessions">0</div>
+          <div class="stat-label">Total Sessions</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total-time">0s</div>
+          <div class="stat-label">Total Plank Time</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-best-set">0s</div>
+          <div class="stat-label">Personal Best</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-avg-session">0s</div>
+          <div class="stat-label">Avg Time / Session</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-streak">0</div>
+          <div class="stat-label">Day Streak</div>
+        </div>
+      </div>
+    </section>
+
+    <main class="main-content">
+
+      <!-- Log Form -->
+      <section class="card form-card">
+        <h2 class="card-title">Log a Session</h2>
+        <form id="session-form" novalidate>
+          <div class="form-row">
+            <label for="session-date" class="form-label">Date</label>
+            <input type="date" id="session-date" class="form-input" required />
+          </div>
+
+          <div class="sets-container">
+            <div class="sets-header">
+              <span class="form-label">Sets</span>
+              <button type="button" id="add-set-btn" class="btn btn-ghost btn-sm">+ Add Set</button>
+            </div>
+            <div id="sets-list" class="sets-list">
+              <!-- Set rows injected here -->
+            </div>
+          </div>
+
+          <div id="form-error" class="form-error hidden"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Session</button>
+            <button type="button" id="clear-form-btn" class="btn btn-ghost">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Charts -->
+      <section class="card chart-card">
+        <h2 class="card-title">Progress</h2>
+        <div class="chart-controls">
+          <div class="chart-tabs">
+            <button class="chart-tab active" data-chart="total">Total Time</button>
+            <button class="chart-tab" data-chart="best">Longest Set</button>
+          </div>
+          <div class="chart-period">
+            <button class="chart-tab active" data-period="daily">Daily</button>
+            <button class="chart-tab" data-period="weekly">Weekly</button>
+            <button class="chart-tab" data-period="monthly">Monthly</button>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-total"></canvas>
+          <canvas id="chart-best" class="hidden"></canvas>
+        </div>
+        <p class="chart-empty hidden" id="chart-empty">No sessions logged yet. Add your first session above!</p>
+      </section>
+
+      <!-- Workout Log -->
+      <section class="card log-card">
+        <div class="log-header">
+          <h2 class="card-title">Workout Log</h2>
+          <span class="log-count" id="log-count">0 sessions</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="log-table" id="log-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Sets</th>
+                <th>Total Time</th>
+                <th>Best Set</th>
+                <th>Sets Detail</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <!-- Rows injected here -->
+            </tbody>
+          </table>
+          <div class="log-empty hidden" id="log-empty">
+            <p>No workouts logged yet.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Delete Confirm Modal -->
+    <div class="modal-overlay hidden" id="modal-overlay">
+      <div class="modal">
+        <h3 class="modal-title">Delete Session?</h3>
+        <p class="modal-body">This action cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn btn-danger" id="modal-confirm">Delete</button>
+          <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+
+    <footer class="app-footer">
+      <p>Data stored locally in your browser &mdash; never leaves your device.</p>
+    </footer>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
