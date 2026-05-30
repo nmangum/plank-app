@@ -437,8 +437,8 @@ function updateLog() {
     const isBestTotal = total  === bestTotal && bestTotal > 0;
 
     const setsPills  = session.sets.map(s => `<span class="set-pill">${s}s</span>`).join('');
-    const setBadge   = isBestSet   ? `<span class="best-badge">★ PB</span>` : '';
-    const totalBadge = isBestTotal ? `<span class="best-badge">★ PB</span>` : '';
+    const setBadge   = isBestSet   ? `<span class="best-badge">★ PR</span>` : '';
+    const totalBadge = isBestTotal ? `<span class="best-badge">★ PR</span>` : '';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -532,7 +532,7 @@ function pickEncouragement(session, prevBest) {
   const count   = sessions.length;
   const streak  = currentStreak();
 
-  if (newBest > prevBest)                        return { msg: `New personal best — ${formatSeconds(newBest)}!`, highlight: true };
+  if (newBest > prevBest)                        return { msg: `New personal record — ${formatSeconds(newBest)}!`, highlight: true };
   if ([5, 10, 25, 50, 100].includes(count))      return { msg: `${count} sessions. You're building something real.`, highlight: true };
   if ([3, 7, 14, 30].includes(streak))           return { msg: `${streak}-day streak!`, highlight: true };
   return { msg: PHRASES[Math.floor(Math.random() * PHRASES.length)], highlight: false };
